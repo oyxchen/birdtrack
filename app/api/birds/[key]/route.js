@@ -24,8 +24,16 @@ function shortValue(sentence, fallback) {
 
 export async function GET(request, { params }) {
   const { key } = await params;
-  const scientific = new URL(request.url).searchParams.get("scientific") || "";
-  if (!/^\d+$/.test(key) || !scientific) return NextResponse.json({ error: "Invalid species." }, { status: 400 });
+  let scientific = new URL(request.url).searchParams.get("scientific") || "";
+  let taxon = null;
+  if (!/^\d+$/.test(key)) return NextResponse.json({ error: "Invalid species." }, { status: 400 });
+  if (!scientific) {
+    const taxonResponse = await fetch(`https://api.gbif.org/v1/species/${key}`, { next: { revalidate: 60 * 60 * 24 * 14 } });
+    if (!taxonResponse.ok) return NextResponse.json({ error: "Species not found." }, { status: 404 });
+    taxon = await taxonResponse.json();
+    scientific = taxon.canonicalName || taxon.species || "";
+    if (!scientific) return NextResponse.json({ error: "Species not found." }, { status: 404 });
+  }
 
   const wikiParams = new URLSearchParams({
     action: "query", format: "json", origin: "*", redirects: "1",
@@ -61,6 +69,8 @@ export async function GET(request, { params }) {
     const imageSource = reusableMedia?.references || reusableMedia?.record?.references || page.fullurl || `https://en.wikipedia.org/wiki/${encodeURIComponent(scientific.replaceAll(" ", "_"))}`;
 
     return NextResponse.json({
+      name: taxon?.vernacularName || taxon?.canonicalName || scientific,
+      scientific,
       image,
       imageSource,
       imageCredit: reusableMedia?.creator || reusableMedia?.record?.recordedBy || (page.thumbnail ? "Wikimedia contributor" : ""),

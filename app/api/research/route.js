@@ -1,30 +1,52 @@
 import { NextResponse } from "next/server";
 
-const birdWords = /\b(bird|birds|avian|eagle|owl|hawk|sparrow|finch|duck|goose|penguin|flamingo|parrot|crow|raven|robin|chicken|turkey|pigeon|dove|nest|feather|beak|wing|migration|endangered)\b/i;
+const birdWords = /\b(birds?|avian|ornithology|birding|eagles?|owls?|hawks?|sparrows?|finches?|ducks?|geese|penguins?|flamingos?|parrots?|crows?|ravens?|robins?|cardinals?|pelicans?|stilts?|chickens?|turkeys?|pigeons?|doves?|nests?|feathers?|beaks?|wings?|migration|endangered)\b/i;
 
 export async function POST(request) {
   const { question = "" } = await request.json();
   if (!question.trim() || question.length > 500) return NextResponse.json({ error: "Please enter a shorter question." }, { status: 400 });
-  if (!birdWords.test(question)) return NextResponse.json({ answer: "I can only help with questions about birds. Try asking about a species, migration, feathers, nests, or bird behavior.", sources: [] });
+  if (!process.env.OPENROUTER_API_KEY && !birdWords.test(question)) return NextResponse.json({ answer: "I can only help with questions about birds. Try asking about a species, migration, feathers, nests, or bird behavior.", sources: [] });
 
-  if (process.env.OPENAI_API_KEY) {
+  if (process.env.OPENROUTER_API_KEY) {
     try {
-      const response = await fetch("https://api.openai.com/v1/responses", {
+      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
-        headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
+        headers: {
+          Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": process.env.OPENROUTER_SITE_URL || "http://localhost:3001",
+          "X-OpenRouter-Title": "BirdTrack"
+        },
         body: JSON.stringify({
-          model: "gpt-5.6-terra",
-          tools: [{ type: "web_search" }],
-          input: `Answer this bird-related question for a general audience in 2-4 clear sentences. Only answer bird questions. Include accurate current facts: ${question}`
+          model: process.env.OPENROUTER_MODEL || "openrouter/free",
+          messages: [
+            {
+              role: "system",
+              content: "You are BirdTrack Research, a careful bird educator. Answer only questions about birds, birding, ornithology, habitats, migration, conservation, anatomy, or behavior. Politely refuse unrelated questions. Use simple language suitable for a general audience. Give a direct answer in 2–4 sentences. You do not have live web access. Never invent statistics, sources, links, or current facts; state uncertainty and knowledge limitations when necessary."
+            },
+            { role: "user", content: question }
+          ],
+          max_tokens: 350,
+          temperature: 0.3
         })
       });
       if (response.ok) {
         const data = await response.json();
-        const text = data.output?.flatMap((o) => o.content || []).find((c) => c.type === "output_text");
-        const citations = text?.annotations?.filter((a) => a.type === "url_citation").map((a) => ({ title: a.title || "Source", url: a.url })) || [];
-        return NextResponse.json({ answer: text?.text || "I couldn’t form an answer.", sources: citations });
+        const message = data.choices?.[0]?.message;
+        return NextResponse.json({
+          answer: message?.content || "I couldn’t form an answer.",
+          sources: [],
+          model: data.model || process.env.OPENROUTER_MODEL || "openrouter/free"
+        });
       }
-    } catch {}
+      const error = await response.json().catch(() => ({}));
+      return NextResponse.json({
+        answer: error.error?.message || "The free OpenRouter model is temporarily unavailable. Please try again shortly.",
+        sources: []
+      }, { status: response.status });
+    } catch {
+      return NextResponse.json({ answer: "Bird Research couldn’t reach OpenRouter. Please try again.", sources: [] }, { status: 502 });
+    }
   }
 
   const samples = [
@@ -34,5 +56,9 @@ export async function POST(request) {
     { pattern: /sing/i, answer: "Birds sing mainly to claim a territory and attract a mate. They also use shorter calls to warn others, stay in contact with their flock, and communicate with their young." }
   ];
   const match = samples.find((s) => s.pattern.test(question));
-  return NextResponse.json({ answer: match?.answer || "That’s a wonderful bird question. Connect an OpenAI API key to receive a current, web-researched answer with citations.", sources: [] });
+  return NextResponse.json({
+    answer: match?.answer || "That’s a wonderful bird question. Add an OpenRouter API key to enable the free Bird Research model.",
+    sources: [],
+    setupRequired: true
+  });
 }

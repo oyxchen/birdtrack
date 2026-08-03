@@ -23,8 +23,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, [contenteditabl
 .page, .inner-page, .detail-page, .workspace-page { min-height: 100vh; }
 .home-page { background: linear-gradient(180deg, #fdfbf8 0, #fdfbf8 42%, #e9f6f7 42%, #edf7f7 100%); }
 header { height: 112px; padding: 18px clamp(24px, 6vw, 90px); display: grid; grid-template-columns: 220px minmax(260px, 580px) 220px; align-items: center; justify-content: space-between; gap: 30px; border-bottom: 1px solid rgba(24,48,70,.08); background: rgba(255,255,255,.74); backdrop-filter: blur(14px); position: relative; z-index: 5; }
-.logo { width: 210px; height: 82px; background: transparent; border: 0; display: flex; align-items: center; justify-self: end; cursor: pointer; padding: 0; overflow: hidden; }
-.logo img { width: 100%; height: 100%; object-fit: cover; object-position: center; transform: scale(1.22); }
+.logo { width: 220px; height: 82px; margin-right: 26px; background: transparent; border: 0; display: flex; align-items: center; justify-self: end; cursor: pointer; padding: 0; overflow: visible; }
+.logo img { width: 100%; height: 100%; object-fit: contain; object-position: center; }
 .search { height: 52px; max-width: 580px; width: 100%; display: flex; align-items: center; gap: 12px; padding: 0 18px; border: 1px solid #cddce0; border-radius: 18px; background: white; box-shadow: 0 5px 18px rgba(31,67,78,.05); }
 .search span { font-size: 29px; transform: rotate(-20deg); }
 .search input { width: 100%; border: 0; outline: none; color: var(--ink); font-size: 15px; }
@@ -141,6 +141,8 @@ select { margin-left: 8px; padding: 10px 34px 10px 13px; border-radius: 12px; bo
 .modal > span { width: 66px; height: 66px; border-radius: 50%; display: grid; place-items: center; margin: auto auto 18px; color: white; font-size: 38px; font-weight: 800; }.modal-check { background: var(--green); }.modal-x { background: #d77369; }
 .modal h2 { font: 800 27px "Nunito"; }.modal p { color: var(--muted); }.modal > div { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 25px; }.modal button { border: 0; border-radius: 12px; padding: 12px; font-weight: 700; cursor: pointer; }.cancel { background: #edf2f2; }.confirm { background: var(--blue-deep); color: white; }
 .muted { color: var(--muted); }
+.route-message { display: grid; place-content: center; min-height: 75vh; text-align: center; padding: 40px; }.route-message h1 { font: 800 clamp(38px,6vw,64px) "Nunito"; margin-bottom: 12px; }.route-message > p { color: var(--muted); }.route-message > button { justify-self: center; border: 0; border-radius: 13px; padding: 12px 20px; background: var(--blue-deep); color: white; font-weight: 800; cursor: pointer; }
+.rarity.recorded { background: var(--blue); color: var(--blue-deep); }
 .login-page { min-height: 100vh; display: grid; place-items: center; padding: 25px; background: radial-gradient(circle at 20% 15%,#f7d7d2 0,transparent 34%),radial-gradient(circle at 80% 80%,#ccecf0 0,transparent 38%),#fffaf6; }
 .login-card { width: min(460px,100%); padding: 48px; background: rgba(255,255,255,.92); border-radius: 32px; box-shadow: 0 25px 80px rgba(35,74,85,.14); text-align: center; }
 .login-mark { width: 76px; height: 76px; border-radius: 50%; background: var(--blue); color: var(--blue-deep); display: grid; place-items: center; font-size: 45px; margin: 0 auto 22px; }
@@ -151,7 +153,7 @@ select { margin-left: 8px; padding: 10px 34px 10px 13px; border-radius: 12px; bo
 .login-error { color: #ad413a !important; font-size: 12px; margin: 0 0 12px; }
 
 @media (max-width: 900px) {
-  header { grid-template-columns: 1fr 170px; height: auto; padding: 8px 20px 14px; }.logo { width: 165px; height: 70px; grid-column: 2; grid-row: 1; }.world-count { grid-column: 1; grid-row: 1; justify-content: flex-start; }.world-count div { display: none; }.search { grid-column: 1/-1; grid-row: 2; }
+  header { grid-template-columns: 1fr 180px; height: auto; padding: 8px 20px 14px; }.logo { width: 175px; height: 70px; margin-right: 12px; grid-column: 2; grid-row: 1; }.world-count { grid-column: 1; grid-row: 1; justify-content: flex-start; }.world-count div { display: none; }.search { grid-column: 1/-1; grid-row: 2; }
   .hero { grid-template-columns: 1fr; padding: 50px 30px 20px; }.hero-art { display: none; }.continent-grid { grid-template-columns: repeat(2,1fr); }.continent-card:last-child { grid-column: auto; }.explore { padding: 40px 30px; }
   .bird-detail-grid { grid-template-columns: 1fr; }.bird-photo { min-height: 470px; }.doc-grid { grid-template-columns: repeat(2,1fr); }
 }

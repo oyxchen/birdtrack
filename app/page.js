@@ -8,6 +8,7 @@ import {
   LOCATIONS,
   WORLD_SPECIES_COUNT
 } from "../lib/data";
+import { pathToRoute, routeToPath } from "../lib/routes";
 
 const Icon = ({ children, size = 20 }) => (
   <span className="icon" style={{ width: size, height: size }} aria-hidden="true">{children}</span>
@@ -262,8 +263,13 @@ function BirdDetail({ bird, seen, navigate, back, requestToggle }) {
   );
 }
 
-function Workspace({ navigate }) {
-  const [tab, setTab] = useState("journal");
+function Workspace({ navigate, initialTab = "journal" }) {
+  const [tab, setTab] = useState(initialTab);
+  useEffect(() => { setTab(initialTab); }, [initialTab]);
+  const changeTab = (nextTab) => {
+    setTab(nextTab);
+    window.history.pushState({}, "", routeToPath({ view: "workspace", tab: nextTab }));
+  };
   const [docs, setDocs] = useStoredState("birdtrack-docs", []);
   const [activeDoc, setActiveDoc] = useState(null);
   const createDoc = () => {
@@ -275,7 +281,7 @@ function Workspace({ navigate }) {
   return (
     <main className="workspace-page">
       <NavBar onBack={() => navigate({ view: "home" })} onHome={() => navigate({ view: "home" })} title="My BirdTrack" />
-      <section className="workspace-head"><div><p className="eyebrow">YOUR PRIVATE SPACE</p><h1>Stories &amp; discoveries</h1></div><div className="tabs"><button className={tab === "journal" ? "active" : ""} onClick={() => setTab("journal")}>Journal</button><button className={tab === "research" ? "active" : ""} onClick={() => setTab("research")}>Bird Research</button></div></section>
+      <section className="workspace-head"><div><p className="eyebrow">YOUR PRIVATE SPACE</p><h1>Stories &amp; discoveries</h1></div><div className="tabs"><button className={tab === "journal" ? "active" : ""} onClick={() => changeTab("journal")}>Journal</button><button className={tab === "research" ? "active" : ""} onClick={() => changeTab("research")}>Bird Research</button></div></section>
       {tab === "journal" ? current ? (
         <JournalEditor
           doc={current}
@@ -327,9 +333,9 @@ function Research() {
     try {
       const res = await fetch("/api/research", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: q }) });
       const data = await res.json();
-      setMessages((m) => [...m, { id: Date.now(), q, ...data }]);
+      setMessages((m) => [{ id: Date.now(), q, ...data }, ...m].slice(0, 2));
     } catch {
-      setMessages((m) => [...m, { id: Date.now(), q, answer: "I couldn’t reach the research service. Please try again.", sources: [] }]);
+      setMessages((m) => [{ id: Date.now(), q, answer: "I couldn’t reach the research service. Please try again.", sources: [] }, ...m].slice(0, 2));
     } finally { setLoading(false); }
   };
   return (
@@ -355,20 +361,70 @@ function useStoredState(key, initial) {
 const stripHtml = (html = "") => html.replace(/<[^>]*>/g, " ");
 const relativeDate = (date) => new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(date);
 
+function DirectBird({ route, navigate, sightings, requestToggle }) {
+  const [bird, setBird] = useState(route.bird || BIRDS.find((item) => item.id === route.birdId));
+  const [error, setError] = useState("");
+  useEffect(() => {
+    setBird(route.bird || BIRDS.find((item) => item.id === route.birdId));
+    setError("");
+    const key = route.birdId?.match(/^gbif-(\d+)$/)?.[1];
+    if (!key || route.bird) return;
+    fetch(`/api/birds/${key}`)
+      .then((response) => response.ok ? response.json() : Promise.reject())
+      .then((data) => setBird({
+        id: route.birdId,
+        gbifKey: Number(key),
+        name: data.name,
+        scientific: data.scientific,
+        rarity: "Recorded",
+        emoji: "🐦",
+        size: data.size,
+        diet: data.diet,
+        behavior: data.behavior,
+        image: data.image,
+        source: data.imageSource || data.articleSource,
+        imageCredit: data.imageCredit,
+        imageLicense: data.imageLicense,
+        description: data.description || ["This bird has verified occurrence records.", "Open the source for more information."]
+      }))
+      .catch(() => setError("This bird profile could not be loaded."));
+  }, [route.birdId, route.bird]);
+
+  if (error) return <main className="inner-page route-message"><h1>Bird unavailable</h1><p>{error}</p><button onClick={() => navigate({ view: "home" })}>Return home</button></main>;
+  if (!bird) return <main className="inner-page route-message"><div className="loading-birds"><span /><p>Loading bird profile…</p></div></main>;
+  return <BirdDetail bird={bird} seen={!!sightings[route.birdId]} navigate={navigate} back={route.back} requestToggle={requestToggle} />;
+}
+
+function RouteNotFound({ navigate }) {
+  return <main className="inner-page route-message"><p className="eyebrow">404</p><h1>That page flew away.</h1><p>The BirdTrack page you requested could not be found.</p><button onClick={() => navigate({ view: "home" })}>Return home</button></main>;
+}
+
 export default function App() {
   const [route, setRoute] = useState({ view: "home" });
   const [search, setSearch] = useState("");
   const [sightings, setSightings] = useStoredState("birdtrack-sightings", {});
   const [confirmBird, setConfirmBird] = useState(null);
-  const navigate = (next) => { setRoute(next); setSearch(""); window.scrollTo({ top: 0, behavior: "smooth" }); };
+  useEffect(() => {
+    const syncRoute = () => setRoute(pathToRoute(window.location.pathname));
+    syncRoute();
+    window.addEventListener("popstate", syncRoute);
+    return () => window.removeEventListener("popstate", syncRoute);
+  }, []);
+  const navigate = (next) => {
+    window.history.pushState({}, "", routeToPath(next));
+    setRoute(next);
+    setSearch("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
   const toggle = () => { setSightings({ ...sightings, [confirmBird.id]: !sightings[confirmBird.id] }); setConfirmBird(null); };
   const seenCount = Object.values(sightings).filter(Boolean).length;
   return <>
-    {route.view === "home" && <Home navigate={navigate} seenCount={seenCount} search={search} setSearch={setSearch} onWorkspace={() => navigate({ view: "workspace" })} />}
+    {route.view === "home" && <Home navigate={navigate} seenCount={seenCount} search={search} setSearch={setSearch} onWorkspace={() => navigate({ view: "workspace", tab: "journal" })} />}
     {route.view === "continent" && <Continent continent={route.continent} navigate={navigate} />}
     {route.view === "area" && <Area {...route} navigate={navigate} sightings={sightings} requestToggle={setConfirmBird} />}
-    {route.view === "bird" && <BirdDetail bird={route.bird || BIRDS.find((b) => b.id === route.birdId)} seen={!!sightings[route.birdId]} navigate={navigate} back={route.back} requestToggle={setConfirmBird} />}
-    {route.view === "workspace" && <Workspace navigate={navigate} />}
+    {route.view === "bird" && <DirectBird route={route} sightings={sightings} navigate={navigate} requestToggle={setConfirmBird} />}
+    {route.view === "workspace" && <Workspace navigate={navigate} initialTab={route.tab} />}
+    {route.view === "not-found" && <RouteNotFound navigate={navigate} />}
     {confirmBird && <Confirm bird={confirmBird} seen={!!sightings[confirmBird.id]} onCancel={() => setConfirmBird(null)} onConfirm={toggle} />}
   </>;
 }
