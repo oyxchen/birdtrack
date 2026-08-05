@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { findExactBirdPhoto } from "../../../../lib/bird-image-source";
 
 function sentences(text = "") {
   return text
@@ -60,10 +61,13 @@ export async function GET(request, { params }) {
   });
 
   try {
-    const wikiResponse = await fetch(`https://en.wikipedia.org/w/api.php?${wikiParams}`, {
-      headers: { "User-Agent": "BirdTrack/1.0 educational bird tracker" },
-      next: { revalidate: 60 * 60 * 24 * 14 }
-    });
+    const [wikiResponse, exactPhoto] = await Promise.all([
+      fetch(`https://en.wikipedia.org/w/api.php?${wikiParams}`, {
+        headers: { "User-Agent": "BirdTrack/1.0 educational bird tracker" },
+        next: { revalidate: 60 * 60 * 24 * 14 }
+      }),
+      findExactBirdPhoto(scientific)
+    ]);
     const wikiData = wikiResponse.ok ? await wikiResponse.json() : { query: { pages: {} } };
     const page = Object.values(wikiData.query?.pages || {})[0] || {};
     const text = page.extract || "";
@@ -73,10 +77,10 @@ export async function GET(request, { params }) {
     const dietSentence = findSentence(list, [/\b(?:diet|feeds? (?:mainly |mostly )?on|eats?|preys? on|food consists?)\b/i]);
     const behaviorSentence = findSentence(list, [/\b(?:migrat|forag|nocturnal|diurnal|social|territorial|flock|nests?|hunts?|dives?|soars?)\b/i]);
     const intro = list.slice(0, 5).join(" ");
-    let image = page.missing === undefined ? page.thumbnail?.source || "" : "";
-    let imageSource = page.fullurl || `https://en.wikipedia.org/wiki/${encodeURIComponent(scientific.replaceAll(" ", "_"))}`;
-    let imageCredit = page.thumbnail ? "Wikimedia contributor" : "";
-    let imageLicense = page.thumbnail ? "Freely licensed Wikimedia image" : "";
+    let image = exactPhoto?.url || (page.missing === undefined ? page.thumbnail?.source || "" : "");
+    let imageSource = exactPhoto?.source || page.fullurl || `https://en.wikipedia.org/wiki/${encodeURIComponent(scientific.replaceAll(" ", "_"))}`;
+    let imageCredit = exactPhoto?.credit || (page.thumbnail ? "Wikimedia contributor" : "");
+    let imageLicense = exactPhoto?.license || (page.thumbnail ? "Freely licensed Wikimedia image" : "");
     if (!image) {
       const commonsParams = new URLSearchParams({
         action: "query", format: "json", generator: "search",

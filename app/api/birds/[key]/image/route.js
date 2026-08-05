@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { findExactBirdPhoto } from "../../../../../lib/bird-image-source";
 
 function commonsImage(pages, scientific) {
   const needle = scientific.toLocaleLowerCase();
@@ -29,8 +30,16 @@ export async function GET(request, { params }) {
     });
     if (!taxonResponse.ok) throw new Error();
     const taxon = await taxonResponse.json();
-    const scientific = taxon.canonicalName || taxon.species;
+    const requestedScientific = new URL(request.url).searchParams.get("scientific")?.trim();
+    const scientific = requestedScientific || taxon.canonicalName || taxon.species;
     if (!scientific || taxon.rank !== "SPECIES") return new NextResponse(null, { status: 404 });
+    const exactPhoto = await findExactBirdPhoto(scientific);
+    if (exactPhoto) {
+      return NextResponse.redirect(exactPhoto.url, {
+        status: 307,
+        headers: { "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800" }
+      });
+    }
     const wikiParams = new URLSearchParams({
       action: "query", format: "json", redirects: "1", prop: "pageimages",
       titles: scientific, piprop: "thumbnail", pithumbsize: "900", pilicense: "free"

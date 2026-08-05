@@ -19,16 +19,35 @@ function normalizeBirdLabel(value = "") {
 }
 
 function uniqueBirds(list) {
-  const names = new Set();
-  const scientificNames = new Set();
-  return list.filter((bird) => {
+  const result = [];
+  const scientificNames = new Map();
+  const commonNames = new Map();
+  for (const bird of list) {
     const name = normalizeBirdLabel(bird.name);
     const scientific = normalizeBirdLabel(bird.scientific);
-    if ((name && names.has(name)) || (scientific && scientificNames.has(scientific))) return false;
-    if (name) names.add(name);
-    if (scientific) scientificNames.add(scientific);
-    return true;
-  });
+    if (scientific && scientificNames.has(scientific)) continue;
+    const sameNameIndex = name ? commonNames.get(name) : undefined;
+    if (sameNameIndex !== undefined) {
+      const existing = result[sameNameIndex];
+      if (bird.catalogVerified && existing.catalogVerified) {
+        // Current authoritative checklists can occasionally retain identical
+        // English names for genuinely distinct species concepts.
+      } else if (bird.catalogVerified && !existing.catalogVerified) {
+        const oldScientific = normalizeBirdLabel(existing.scientific);
+        if (oldScientific) scientificNames.delete(oldScientific);
+        result[sameNameIndex] = bird;
+        if (scientific) scientificNames.set(scientific, sameNameIndex);
+        continue;
+      } else {
+        continue;
+      }
+    }
+    const index = result.length;
+    result.push(bird);
+    if (scientific) scientificNames.set(scientific, index);
+    if (name && !commonNames.has(name)) commonNames.set(name, index);
+  }
+  return result;
 }
 
 function Logo({ onClick }) {
@@ -170,9 +189,24 @@ function Home({ navigate, seenCount, search, setSearch, onWorkspace }) {
         </div>
         <div className="rare-bird-grid">
           {extremelyRareBirds.map((bird) => (
-            <button key={bird.id} className="rare-bird-card" onClick={() => navigate({ view: "bird", birdId: bird.id, bird, back: { view: "home", restoreScroll: window.scrollY } })}>
+            <button
+              key={bird.id}
+              className="rare-bird-card"
+              data-restore-bird={bird.id}
+              onClick={(event) => navigate({
+                view: "bird",
+                birdId: bird.id,
+                bird,
+                back: {
+                  view: "home",
+                  restoreScroll: window.scrollY,
+                  restoreBird: bird.id,
+                  restoreViewportTop: event.currentTarget.getBoundingClientRect().top
+                }
+              })}
+            >
               <span className="rare-bird-photo">
-                <img src={`/api/birds/${bird.gbifKey}/image`} alt="" loading="lazy" onError={(event) => { event.currentTarget.style.display = "none"; }} />
+                <img src={`/api/birds/${bird.gbifKey}/image?scientific=${encodeURIComponent(bird.scientific)}`} alt="" loading="lazy" onError={(event) => { event.currentTarget.style.display = "none"; }} />
               </span>
               <span><b>{bird.name}</b><i>{bird.scientific}</i><small>Critically Endangered · verified living species</small></span>
               <em>→</em>
@@ -329,7 +363,7 @@ function Area({ continent, country, navigate, sightings, requestToggle }) {
 
 function BirdRow({ bird, seen, onOpen, onToggle }) {
   const [imageFailed, setImageFailed] = useState(false);
-  const thumbnail = bird.image || (bird.gbifKey ? `/api/birds/${bird.gbifKey}/image` : "");
+  const thumbnail = bird.image || (bird.gbifKey ? `/api/birds/${bird.gbifKey}/image?scientific=${encodeURIComponent(bird.scientific)}` : "");
   return (
     <article className="bird-row">
       <button className="bird-main" onClick={onOpen}>
@@ -609,9 +643,21 @@ export default function App() {
     setRoute(next);
     setSearch("");
     const target = Number.isFinite(next.restoreScroll) ? next.restoreScroll : 0;
-    window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => window.scrollTo({ top: target, behavior: "auto" }));
-    });
+    const restorePosition = () => {
+      const escapedBird = next.restoreBird && window.CSS?.escape ? window.CSS.escape(next.restoreBird) : next.restoreBird;
+      const bird = escapedBird ? document.querySelector(`[data-restore-bird="${escapedBird}"]`) : null;
+      if (bird && Number.isFinite(next.restoreViewportTop)) {
+        const adjustment = bird.getBoundingClientRect().top - next.restoreViewportTop;
+        window.scrollBy({ top: adjustment, behavior: "auto" });
+      } else {
+        window.scrollTo({ top: target, behavior: "auto" });
+      }
+    };
+    window.requestAnimationFrame(() => window.requestAnimationFrame(restorePosition));
+    if (next.restoreBird) {
+      window.setTimeout(restorePosition, 150);
+      window.setTimeout(restorePosition, 500);
+    }
   };
   const toggle = () => {
     const willBeSeen = !sightings[confirmBird.id];

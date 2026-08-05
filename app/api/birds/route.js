@@ -20,6 +20,10 @@ const UNALIGNED_RARE_TAXA = new Set([
 ]);
 const EXTREMELY_RARE_CATALOG = VERIFIED_EXTREMELY_RARE_SPECIES
   .filter((item) => !UNALIGNED_RARE_TAXA.has(item.scientific));
+const normalizeScientific = (value = "") => value.replace(/\s+/g, " ").trim().toLocaleLowerCase();
+const LIVING_NAME_BY_SCIENTIFIC = new Map(
+  LIVING_SPECIES.map(([name, scientific]) => [normalizeScientific(scientific), name])
+);
 
 function rarityFor(count) {
   if (count >= 10000) return "Common";
@@ -90,9 +94,11 @@ async function speciesDetails(item) {
   const scientific = taxon.canonicalName || taxon.scientificName;
   const isHybrid = /\s(?:x|×)\s/i.test(scientific || "") || /hybrid/i.test(taxon.taxonomicStatus || "");
   if (taxon.rank !== "SPECIES" && !isHybrid) return null;
+  const officialLivingName = LIVING_NAME_BY_SCIENTIFIC.get(normalizeScientific(scientific));
   const englishName = chooseCommonName(names);
   const taxonVernacular = taxon.vernacularName?.trim() || "";
-  const displayName = englishName ||
+  const displayName = officialLivingName ||
+    englishName ||
     (taxonVernacular && taxonVernacular.toLowerCase() !== scientific?.toLowerCase() ? taxonVernacular : "") ||
     (isHybrid ? await hybridDisplayName(scientific) : "");
   if (!displayName) return null;
@@ -101,6 +107,7 @@ async function speciesDetails(item) {
     gbifKey: taxon.key,
     name: displayName,
     scientific,
+    catalogVerified: Boolean(officialLivingName) || isHybrid,
     rarity: rarityFor(item.count),
     sightings: item.count,
     emoji: "◉",
