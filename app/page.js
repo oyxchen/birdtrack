@@ -44,16 +44,66 @@ function Header({ seenCount, onLogo, onSearch, search }) {
 }
 
 function Home({ navigate, seenCount, search, setSearch, onWorkspace }) {
+  const [catalogBirds, setCatalogBirds] = useState([]);
+  const [searchingBirds, setSearchingBirds] = useState(false);
+  const [extremelyRareBirds, setExtremelyRareBirds] = useState([]);
+  const [rareTotal, setRareTotal] = useState(0);
+  const [rareNextOffset, setRareNextOffset] = useState(0);
+  const [loadingRare, setLoadingRare] = useState(true);
+  const loadExtremelyRare = async (offset = 0) => {
+    setLoadingRare(true);
+    try {
+      const response = await fetch(`/api/birds?rare=true&offset=${offset}&limit=12`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+      setExtremelyRareBirds((current) => offset === 0 ? data.birds : [...current, ...data.birds]);
+      setRareTotal(data.total);
+      setRareNextOffset(data.nextOffset);
+    } catch {
+      if (offset === 0) setExtremelyRareBirds([]);
+    } finally {
+      setLoadingRare(false);
+    }
+  };
+  useEffect(() => { loadExtremelyRare(0); }, []);
+  useEffect(() => {
+    const query = search.trim();
+    if (query.length < 2) {
+      setCatalogBirds([]);
+      setSearchingBirds(false);
+      return;
+    }
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setSearchingBirds(true);
+      try {
+        const response = await fetch(`/api/birds?q=${encodeURIComponent(query)}`, { signal: controller.signal });
+        const data = await response.json();
+        if (response.ok) setCatalogBirds(data.birds || []);
+      } catch (error) {
+        if (error.name !== "AbortError") setCatalogBirds([]);
+      } finally {
+        if (!controller.signal.aborted) setSearchingBirds(false);
+      }
+    }, 250);
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [search]);
+
   const results = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return [];
-    const birds = BIRDS.filter((b) => `${b.name} ${b.scientific}`.toLowerCase().includes(q))
+    const localBirds = BIRDS.filter((bird) => `${bird.name} ${bird.scientific}`.toLowerCase().includes(q));
+    const allBirds = [...localBirds, ...catalogBirds.filter((bird) => !localBirds.some((item) => item.id === bird.id))];
+    const birds = allBirds
       .map((b) => ({ type: "bird", title: b.name, subtitle: b.scientific, value: b.id }));
     const places = Object.values(LOCATIONS).flatMap((l) => l.regions)
       .filter((p) => p.toLowerCase().includes(q))
       .map((p) => ({ type: "place", title: p, subtitle: "Place", value: p }));
     return [...birds, ...places].slice(0, 8);
-  }, [search]);
+  }, [search, catalogBirds]);
 
   return (
     <main className="page home-page">
@@ -65,7 +115,7 @@ function Home({ navigate, seenCount, search, setSearch, onWorkspace }) {
             <button key={`${r.type}-${r.value}`} onClick={() => r.type === "bird" ? navigate({ view: "bird", birdId: r.value }) : setSearch("")}>
               <span>{r.type === "bird" ? "🐦" : "⌖"}</span><div><b>{r.title}</b><small>{r.subtitle}</small></div><em>→</em>
             </button>
-          )) : <p className="muted">No birds or places found.</p>}
+          )) : <p className="muted">{searchingBirds ? "Searching the complete bird catalog…" : "No birds or places found."}</p>}
         </section>
       )}
       <section className="hero">
@@ -92,7 +142,33 @@ function Home({ navigate, seenCount, search, setSearch, onWorkspace }) {
           ))}
         </div>
       </section>
-      <p className="data-note">Bird lists include species with 10+ verified sightings in the selected area during the rolling previous 10 years.</p>
+      <section className="extremely-rare-section">
+        <div className="section-title">
+          <div>
+            <p className="eyebrow">WORLDWIDE RECORD WATCH</p>
+            <h2>Extremely Rare</h2>
+            <p>Birds with fewer than 10 worldwide GBIF records from 2016–2026. This record count is not the same as an official conservation assessment.</p>
+          </div>
+          <span>{rareTotal ? `${rareTotal} species` : "Checking records…"}</span>
+        </div>
+        <div className="rare-bird-grid">
+          {extremelyRareBirds.map((bird) => (
+            <button key={bird.id} className="rare-bird-card" onClick={() => navigate({ view: "bird", birdId: bird.id, bird })}>
+              <span className="rare-bird-photo">
+                <img src={`/api/birds/${bird.gbifKey}/image`} alt="" loading="lazy" onError={(event) => { event.currentTarget.style.display = "none"; }} />
+              </span>
+              <span><b>{bird.name}</b><i>{bird.scientific}</i><small>Endangered · {bird.sightings} worldwide GBIF {bird.sightings === 1 ? "record" : "records"}</small></span>
+              <em>→</em>
+            </button>
+          ))}
+        </div>
+        {loadingRare && <div className="loading-birds"><span /><p>Checking extremely rare species…</p></div>}
+        {!loadingRare && rareNextOffset !== null && extremelyRareBirds.length > 0 && (
+          <button className="load-more" onClick={() => loadExtremelyRare(rareNextOffset)}>
+            Show more extremely rare birds <small>{extremelyRareBirds.length} of {rareTotal} shown</small>
+          </button>
+        )}
+      </section>
     </main>
   );
 }
@@ -158,6 +234,9 @@ function Area({ continent, country, navigate, sightings, requestToggle }) {
   };
 
   useEffect(() => { setLiveBirds([]); setLiveTotal(null); setNextOffset(0); loadBirds(0); }, [country]);
+  useEffect(() => {
+    if (!loadingBirds && !dataError && nextOffset !== null && liveBirds.length > 0) loadBirds(nextOffset);
+  }, [loadingBirds, dataError, nextOffset, liveBirds.length]);
 
   return (
     <main className="inner-page area-page">
@@ -181,9 +260,9 @@ function Area({ continent, country, navigate, sightings, requestToggle }) {
       <section className="bird-list">
         {birds.map((bird) => <BirdRow key={bird.id} bird={bird} seen={!!sightings[bird.id]} onOpen={() => navigate({ view: "bird", birdId: bird.id, bird, back: { view: "area", continent, country } })} onToggle={() => requestToggle(bird)} />)}
       </section>
-      {loadingBirds && <div className="loading-birds"><span /><p>Finding every qualifying bird recorded in {country}…</p></div>}
+      {loadingBirds && liveBirds.length === 0 && <div className="loading-birds"><span /><p>Finding every qualifying bird recorded in {country}…</p></div>}
       {dataError && <div className="data-warning">{dataError} Showing the offline starter list. <button onClick={() => loadBirds(0)}>Try again</button></div>}
-      {!loadingBirds && nextOffset !== null && liveBirds.length > 0 && <button className="load-more" onClick={() => loadBirds(nextOffset)}>Load more birds <small>{liveBirds.length} of {liveTotal} shown</small></button>}
+      {loadingBirds && liveBirds.length > 0 && <div className="loading-birds"><span /><p>Loading all species… {liveBirds.length} of {liveTotal ?? "many"} shown</p></div>}
       <p className="data-note">Source: GBIF occurrence records • Includes species with 10+ valid records during the rolling previous 10 years • Updated every 12 hours.</p>
     </main>
   );
@@ -222,6 +301,10 @@ function BirdDetail({ bird, seen, navigate, back, requestToggle }) {
         if (!active) return;
         setProfile({
           ...bird, ...details,
+          name: bird.name,
+          rarity: bird.rarity,
+          endangered: bird.endangered,
+          sightings: bird.sightings,
           source: details.imageSource || bird.source,
           description: details.description?.filter(Boolean).length ? details.description.filter(Boolean) : bird.description
         });
@@ -244,7 +327,7 @@ function BirdDetail({ bird, seen, navigate, back, requestToggle }) {
         <div className="bird-copy">
           <p className="eyebrow">SPECIES PROFILE</p>
           <h1>{shownBird.name}</h1><i className="scientific">{shownBird.scientific}</i>
-          <div className="badges"><span className={`rarity ${shownBird.rarity.toLowerCase()}`}>{shownBird.rarity} locally{shownBird.sightings ? ` · ${shownBird.sightings.toLocaleString()} records` : ""}</span>{shownBird.endangered && <span className="endangered">Endangered</span>}</div>
+          <div className="badges"><span className={`rarity ${shownBird.rarity.toLowerCase().replaceAll(" ", "-")}`}>{shownBird.rarity === "Extremely Rare" ? `${shownBird.rarity} worldwide` : `${shownBird.rarity} locally`}{shownBird.sightings ? ` · ${shownBird.sightings.toLocaleString()} records` : ""}</span>{shownBird.endangered && <span className="endangered">Endangered</span>}</div>
           <p>{shownBird.description[0]}</p><p>{shownBird.description[1]}</p>
           {profileLoading && <p className="profile-loading">Updating this profile from live species sources…</p>}
           <div className="quick-facts">

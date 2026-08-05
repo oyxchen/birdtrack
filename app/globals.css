@@ -61,6 +61,18 @@ h1,h2,h3,p { margin-top: 0; }
 .continent-card > b { font-size: 22px; color: var(--coral-deep); }
 .continent-card:last-child { grid-column: 2; }
 .data-note { text-align: center; color: var(--muted); font-size: 12px; padding: 30px; margin: 0; }
+.extremely-rare-section { max-width: 1150px; margin: 58px auto 0; padding: 34px; border-radius: 30px; background: linear-gradient(145deg,#fff3f5,#f4e9f2); box-shadow: var(--shadow); }
+.extremely-rare-section .section-title { align-items: flex-start; }
+.extremely-rare-section .section-title p:last-child { max-width: 690px; margin: 8px 0 0; color: var(--muted); line-height: 1.55; font-size: 13px; }
+.rare-bird-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; margin-top: 24px; }
+.rare-bird-card { display: grid; grid-template-columns: 58px 1fr 22px; gap: 13px; align-items: center; padding: 11px; border: 1px solid #efd5df; border-radius: 18px; background: rgba(255,255,255,.88); text-align: left; cursor: pointer; }
+.rare-bird-photo { width: 58px; height: 58px; border-radius: 14px; overflow: hidden; background: linear-gradient(145deg,#f2d3dc,#c7e9ed); }
+.rare-bird-photo img { width: 100%; height: 100%; object-fit: cover; }
+.rare-bird-card > span:nth-child(2) { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.rare-bird-card b { font: 800 15px "Nunito"; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rare-bird-card i { color: var(--muted); font-family: Georgia,serif; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rare-bird-card small { color: #8c304d; font-size: 10px; font-weight: 800; }
+.rare-bird-card em { color: var(--coral-deep); font-style: normal; font-size: 20px; }
 .loading-birds { max-width: 1150px; margin: 22px auto; display: flex; align-items: center; justify-content: center; gap: 12px; color: var(--muted); }
 .loading-birds span { width: 21px; height: 21px; border: 3px solid var(--blue-2); border-top-color: var(--blue-deep); border-radius: 50%; animation: spin .8s linear infinite; }.loading-birds p { margin: 0; }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -105,6 +117,7 @@ select { margin-left: 8px; padding: 10px 34px 10px 13px; border-radius: 12px; bo
 .bird-main h3 { margin: 0; font: 800 18px "Nunito"; }.bird-main i, .scientific { color: var(--muted); font-family: Georgia, serif; font-size: 13px; }.bird-main p { margin: 7px 0 0; }
 .rarity, .endangered { display: inline-block; padding: 4px 9px; border-radius: 100px; font-size: 10px; font-weight: 800; font-style: normal; margin-right: 6px; }
 .rarity.common { background: #dff3e9; color: #33755a; }.rarity.uncommon { background: #fff0c9; color: #8e6818; }.rarity.rare { background: #f9d8d5; color: #a34641; }.endangered { background: #efc7d3; color: #8c304d; }
+.rarity.extremely-rare { background: #7e2447; color: white; }
 .status { border: 0; background: transparent; font-size: 28px; font-weight: 800; display: flex; flex-direction: column; align-items: center; cursor: pointer; }.status small { font-size: 10px; }.status.seen { color: var(--green); }.status.unseen { color: #d8756b; }
 .row-arrow { border: 0; background: transparent; font-size: 31px; color: #8ca0aa; cursor: pointer; }
 .bird-detail-grid { max-width: 1180px; margin: 65px auto; padding: 0 30px; display: grid; grid-template-columns: .9fr 1.1fr; gap: 55px; }
@@ -156,6 +169,7 @@ select { margin-left: 8px; padding: 10px 34px 10px 13px; border-radius: 12px; bo
   header { grid-template-columns: 1fr 180px; height: auto; padding: 8px 20px 14px; }.logo { width: 175px; height: 70px; margin-right: 12px; grid-column: 2; grid-row: 1; }.world-count { grid-column: 1; grid-row: 1; justify-content: flex-start; }.world-count div { display: none; }.search { grid-column: 1/-1; grid-row: 2; }
   .hero { grid-template-columns: 1fr; padding: 50px 30px 20px; }.hero-art { display: none; }.continent-grid { grid-template-columns: repeat(2,1fr); }.continent-card:last-child { grid-column: auto; }.explore { padding: 40px 30px; }
   .bird-detail-grid { grid-template-columns: 1fr; }.bird-photo { min-height: 470px; }.doc-grid { grid-template-columns: repeat(2,1fr); }
+  .extremely-rare-section { margin-left: 20px; margin-right: 20px; }.rare-bird-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 600px) {
   .continent-grid { grid-template-columns: 1fr; }.continent-card { grid-template-columns: 58px 1fr 25px; padding: 18px; }.continent-shape { width: 55px; height: 55px; }.hero h1 { font-size: 43px; }.section-title { align-items: start; flex-direction: column; gap: 7px; }
@@ -166,4 +180,5 @@ select { margin-left: 8px; padding: 10px 34px 10px 13px; border-radius: 12px; bo
   .bird-detail-grid { padding: 0 18px; margin: 25px auto; gap: 25px; }.bird-photo { min-height: 360px; }.bird-copy h1 { font-size: 44px; }.quick-facts { grid-template-columns: 1fr; }.seen-panel { align-items: flex-start; flex-direction: column; gap: 20px; }
   .workspace-head { align-items: flex-start; flex-direction: column; }.doc-grid { grid-template-columns: 1fr; padding: 0 18px; }.new-doc,.doc-card { height: 170px; }.paper { padding: 35px 25px; }.toolbar { flex-wrap: wrap; }
   .research { padding: 0 18px; }.research form button { padding: 0 12px; }.suggestions { flex-wrap: wrap; }
+  .extremely-rare-section { margin: 35px 15px 0; padding: 22px 15px; }.rare-bird-card { grid-template-columns: 50px 1fr 18px; }.rare-bird-photo { width: 50px; height: 50px; }
 }
