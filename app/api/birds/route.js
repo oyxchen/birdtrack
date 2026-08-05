@@ -21,7 +21,7 @@ function rarityFor(count) {
   return "Rare";
 }
 
-function chooseCommonName(names, fallback) {
+function chooseCommonName(names) {
   const candidates = names
     .filter((item) => item.language === "eng")
     .filter((item) => {
@@ -44,7 +44,7 @@ function chooseCommonName(names, fallback) {
       return { name: item.vernacularName.trim(), score };
     })
     .sort((a, b) => b.score - a.score || a.name.length - b.name.length);
-  return candidates[0]?.name || fallback;
+  return candidates[0]?.name || "";
 }
 
 async function speciesDetails(item) {
@@ -56,12 +56,17 @@ async function speciesDetails(item) {
   const taxon = await response.json();
   const names = namesResponse.ok ? (await namesResponse.json()).results || [] : [];
   if (taxon.rank !== "SPECIES") return null;
-  const englishName = chooseCommonName(names, taxon.vernacularName || taxon.canonicalName || taxon.scientificName);
+  const scientific = taxon.canonicalName || taxon.scientificName;
+  const englishName = chooseCommonName(names);
+  const taxonVernacular = taxon.vernacularName?.trim() || "";
+  const displayName = englishName ||
+    (taxonVernacular && taxonVernacular.toLowerCase() !== scientific?.toLowerCase() ? taxonVernacular : "") ||
+    "Common name unavailable";
   return {
     id: `gbif-${taxon.key}`,
     gbifKey: taxon.key,
-    name: englishName || taxon.vernacularName || taxon.canonicalName || taxon.scientificName,
-    scientific: taxon.canonicalName || taxon.scientificName,
+    name: displayName,
+    scientific,
     rarity: rarityFor(item.count),
     sightings: item.count,
     emoji: "◉",
@@ -71,7 +76,7 @@ async function speciesDetails(item) {
     image: "",
     source: `https://www.gbif.org/species/${taxon.key}`,
     description: [
-      `${englishName || taxon.vernacularName || taxon.canonicalName} (${taxon.canonicalName || taxon.scientificName}) has been documented ${item.count.toLocaleString()} times in this area during BirdTrack’s rolling ten-year data window.`,
+      `${displayName} (${scientific}) has been documented ${item.count.toLocaleString()} times in this area during BirdTrack’s rolling ten-year data window.`,
       "Open the GBIF species source for taxonomy and occurrence details. A richer sourced profile and freely licensed photograph can be added when this species page is opened."
     ]
   };
