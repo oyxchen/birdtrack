@@ -13,6 +13,13 @@ const COUNTRY_CODES = {
 
 const currentYear = new Date().getUTCFullYear();
 const firstYear = currentYear - 10;
+const UNALIGNED_RARE_TAXA = new Set([
+  "Pachyptila macgillivrayi", "Gyps rueppelli", "Rhinoplax vigil",
+  "Strigops habroptilus", "Cacatua citrinocristata", "Lathamus discolor",
+  "Chiroxiphia bokermanni", "Hypsipetes platenae"
+]);
+const EXTREMELY_RARE_CATALOG = VERIFIED_EXTREMELY_RARE_SPECIES
+  .filter((item) => !UNALIGNED_RARE_TAXA.has(item.scientific));
 
 function rarityFor(count) {
   if (count >= 10000) return "Common";
@@ -46,6 +53,32 @@ function chooseCommonName(names) {
   return candidates[0]?.name || "";
 }
 
+async function hybridDisplayName(scientific) {
+  const parts = scientific.split(/\s+(?:x|×)\s+/i);
+  if (parts.length !== 2) return `${scientific.replace(/\s+x\s+/i, " × ")} hybrid`;
+  const genus = parts[0].split(" ")[0];
+  const parentNames = await Promise.all(parts.map(async (part, index) => {
+    const parent = index === 1 && !part.includes(" ") ? `${genus} ${part}` : part;
+    try {
+      const matchResponse = await fetch(`https://api.gbif.org/v1/species/match?${new URLSearchParams({ name: parent, class: "Aves", rank: "SPECIES" })}`, {
+        next: { revalidate: 60 * 60 * 24 * 14 }
+      });
+      if (!matchResponse.ok) return parent;
+      const match = await matchResponse.json();
+      const key = match.usageKey || match.speciesKey;
+      if (!key) return parent;
+      const namesResponse = await fetch(`https://api.gbif.org/v1/species/${key}/vernacularNames?limit=100`, {
+        next: { revalidate: 60 * 60 * 24 * 14 }
+      });
+      const names = namesResponse.ok ? (await namesResponse.json()).results || [] : [];
+      return chooseCommonName(names) || parent;
+    } catch {
+      return parent;
+    }
+  }));
+  return `${parentNames.join(" × ")} hybrid`;
+}
+
 async function speciesDetails(item) {
   const [response, namesResponse] = await Promise.all([
     fetch(`https://api.gbif.org/v1/species/${item.name}`, { next: { revalidate: 60 * 60 * 24 * 14 } }),
@@ -54,12 +87,14 @@ async function speciesDetails(item) {
   if (!response.ok) return null;
   const taxon = await response.json();
   const names = namesResponse.ok ? (await namesResponse.json()).results || [] : [];
-  if (taxon.rank !== "SPECIES") return null;
   const scientific = taxon.canonicalName || taxon.scientificName;
+  const isHybrid = /\s(?:x|×)\s/i.test(scientific || "") || /hybrid/i.test(taxon.taxonomicStatus || "");
+  if (taxon.rank !== "SPECIES" && !isHybrid) return null;
   const englishName = chooseCommonName(names);
   const taxonVernacular = taxon.vernacularName?.trim() || "";
   const displayName = englishName ||
-    (taxonVernacular && taxonVernacular.toLowerCase() !== scientific?.toLowerCase() ? taxonVernacular : "");
+    (taxonVernacular && taxonVernacular.toLowerCase() !== scientific?.toLowerCase() ? taxonVernacular : "") ||
+    (isHybrid ? await hybridDisplayName(scientific) : "");
   if (!displayName) return null;
   return {
     id: `gbif-${taxon.key}`,
@@ -82,19 +117,52 @@ async function speciesDetails(item) {
 }
 
 async function matchLivingSpecies([name, scientific], count = 0) {
-  const params = new URLSearchParams({ name: scientific, class: "Aves", rank: "SPECIES" });
-  const response = await fetch(`https://api.gbif.org/v1/species/match?${params}`, {
+  const params = new URLSearchParams({
+    q: scientific,
+    highertaxon_key: "212",
+    rank: "SPECIES",
+    limit: "20"
+  });
+  const response = await fetch(`https://api.gbif.org/v1/species/search?${params}`, {
     next: { revalidate: 60 * 60 * 24 * 14 }
   });
   if (!response.ok) return null;
-  const match = await response.json();
-  const key = match.usageKey || match.speciesKey;
-  if (!key || match.matchType === "NONE") return null;
+  const data = await response.json();
+  const normalize = (value = "") => value
+    .normalize("NFKD")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLocaleLowerCase();
+  const exact = (data.results || []).find((result) =>
+    result.rank === "SPECIES" &&
+    result.class === "Aves" &&
+    normalize(result.canonicalName || result.scientificName?.replace(/\s+[A-Z][a-z]*,?.*$/, "")) === normalize(scientific)
+  );
+  const key = exact?.acceptedKey || exact?.nubKey || exact?.key;
+  if (!key) return null;
   const bird = await speciesDetails({ name: key, count });
   return bird ? { ...bird, name, scientific } : null;
 }
 
 async function searchSpecies(query) {
+  if (/\s(?:x|×)\s|\bhybrid\b/i.test(query)) {
+    const params = new URLSearchParams({ q: query, highertaxon_key: "212", limit: "20" });
+    const response = await fetch(`https://api.gbif.org/v1/species/search?${params}`, {
+      next: { revalidate: 60 * 60 * 24 }
+    });
+    if (!response.ok) throw new Error("GBIF hybrid search failed");
+    const data = await response.json();
+    const normalized = query.replace(/\s+/g, " ").trim().toLocaleLowerCase();
+    const hybrids = (data.results || [])
+      .filter((result) => /\s(?:x|×)\s/i.test(result.scientificName || ""))
+      .filter((result) => (result.scientificName || "").replace(/\s+/g, " ").trim().toLocaleLowerCase() === normalized)
+      .slice(0, 10);
+    const birds = (await Promise.all(hybrids.map((result) => speciesDetails({
+      name: result.acceptedKey || result.nubKey || result.key,
+      count: 0
+    })))).filter(Boolean);
+    return birds.map((bird) => ({ ...bird, rarity: "Hybrid", sightings: undefined }));
+  }
   const normalized = query.toLocaleLowerCase();
   const matches = LIVING_SPECIES
     .filter(([name, scientific]) =>
@@ -116,7 +184,7 @@ export async function GET(request) {
   if (searchParams.get("rare") === "true") {
     const offset = Math.max(0, Number(searchParams.get("offset")) || 0);
     const limit = Math.min(40, Math.max(8, Number(searchParams.get("limit")) || 12));
-    const page = VERIFIED_EXTREMELY_RARE_SPECIES.slice(offset, offset + limit);
+    const page = EXTREMELY_RARE_CATALOG.slice(offset, offset + limit);
     try {
       const birds = (await Promise.all(page.map(async (item) => {
         const bird = await matchLivingSpecies([item.name, item.scientific]);
@@ -132,8 +200,8 @@ export async function GET(request) {
       }))).filter(Boolean);
       return NextResponse.json({
         birds,
-        total: VERIFIED_EXTREMELY_RARE_SPECIES.length,
-        nextOffset: offset + page.length < VERIFIED_EXTREMELY_RARE_SPECIES.length ? offset + page.length : null,
+        total: EXTREMELY_RARE_CATALOG.length,
+        nextOffset: offset + page.length < EXTREMELY_RARE_CATALOG.length ? offset + page.length : null,
         source: "AviList v2025b taxonomy and English names; BirdLife/IUCN Red List October 2025 status; GBIF taxon matching",
         auditedAt: "2026-08-04"
       });
