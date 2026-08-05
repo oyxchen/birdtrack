@@ -28,11 +28,16 @@ header { height: 112px; padding: 18px clamp(24px, 6vw, 90px); display: grid; gri
 .search { height: 52px; max-width: 580px; width: 100%; display: flex; align-items: center; gap: 12px; padding: 0 18px; border: 1px solid #cddce0; border-radius: 18px; background: white; box-shadow: 0 5px 18px rgba(31,67,78,.05); }
 .search span { font-size: 29px; transform: rotate(-20deg); }
 .search input { width: 100%; border: 0; outline: none; color: var(--ink); font-size: 15px; }
-.world-count { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.world-count { display: flex; align-items: center; justify-content: flex-end; gap: 10px; border: 0; background: transparent; color: inherit; padding: 6px; border-radius: 14px; cursor: pointer; text-align: left; }
+.world-count:hover { background: rgba(255, 255, 255, .55); }
+.world-count:focus-visible { outline: 3px solid var(--coral); outline-offset: 2px; }
 .count-icon { width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; color: white; font-weight: 800; background: var(--green); }
 .world-count div { display: flex; flex-direction: column; }
 .world-count strong { font-family: "Nunito"; font-size: 17px; }
 .world-count small { color: var(--muted); }
+.empty-life-list { max-width: 620px; margin: 32px auto; padding: 42px; text-align: center; }
+.empty-life-list > span { font-size: 48px; }
+.empty-life-list button { border: 0; border-radius: 999px; background: var(--navy); color: white; padding: 12px 22px; font-weight: 800; cursor: pointer; }
 .hero { min-height: 455px; max-width: 1320px; padding: 66px 56px 45px; margin: auto; display: grid; grid-template-columns: 1.2fr 1fr; align-items: center; }
 .eyebrow { color: var(--coral-deep); letter-spacing: 2.2px; font-size: 12px; font-weight: 800; margin: 0 0 13px; }
 h1,h2,h3,p { margin-top: 0; }

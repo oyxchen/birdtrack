@@ -28,6 +28,12 @@ export async function generateMetadata({ params }) {
       description: route.tab === "research" ? "Ask focused questions about birds and ornithology." : "Write and organize private birdwatching journal entries."
     };
   }
+  if (route.view === "life-list") {
+    return {
+      title: "My Bird Life List",
+      description: "Review the bird species you have marked as seen in BirdTrack."
+    };
+  }
   return { title: "Page not found" };
 }
 

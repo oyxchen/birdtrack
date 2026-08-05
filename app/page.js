@@ -22,13 +22,13 @@ function Logo({ onClick }) {
   );
 }
 
-function Header({ seenCount, onLogo, onSearch, search }) {
+function Header({ seenCount, onSeen, onLogo, onSearch, search }) {
   return (
     <header>
-      <div className="world-count">
+      <button className="world-count" onClick={onSeen} aria-label={`Open your life list: ${seenCount} birds seen`}>
         <span className="count-icon">✓</span>
         <div><strong>{seenCount.toLocaleString()} / {WORLD_SPECIES_COUNT.toLocaleString()}</strong><small>birds spotted</small></div>
-      </div>
+      </button>
       <label className="search">
         <span>⌕</span>
         <input
@@ -107,7 +107,7 @@ function Home({ navigate, seenCount, search, setSearch, onWorkspace }) {
 
   return (
     <main className="page home-page">
-      <Header seenCount={seenCount} onLogo={onWorkspace} onSearch={setSearch} search={search} />
+      <Header seenCount={seenCount} onSeen={() => navigate({ view: "life-list" })} onLogo={onWorkspace} onSearch={setSearch} search={search} />
       {search && (
         <section className="search-results card">
           <p className="eyebrow">Search results</p>
@@ -147,7 +147,7 @@ function Home({ navigate, seenCount, search, setSearch, onWorkspace }) {
           <div>
             <p className="eyebrow">WORLDWIDE RECORD WATCH</p>
             <h2>Extremely Rare</h2>
-            <p>Birds with fewer than 10 worldwide GBIF records from 2016–2026. This record count is not the same as an official conservation assessment.</p>
+            <p>Living species classified as Critically Endangered in the October 2025 BirdLife/IUCN assessment, using AviList’s official English names and taxonomy.</p>
           </div>
           <span>{rareTotal ? `${rareTotal} species` : "Checking records…"}</span>
         </div>
@@ -157,7 +157,7 @@ function Home({ navigate, seenCount, search, setSearch, onWorkspace }) {
               <span className="rare-bird-photo">
                 <img src={`/api/birds/${bird.gbifKey}/image`} alt="" loading="lazy" onError={(event) => { event.currentTarget.style.display = "none"; }} />
               </span>
-              <span><b>{bird.name}</b><i>{bird.scientific}</i><small>Endangered · {bird.sightings} worldwide GBIF {bird.sightings === 1 ? "record" : "records"}</small></span>
+              <span><b>{bird.name}</b><i>{bird.scientific}</i><small>Critically Endangered · verified living species</small></span>
               <em>→</em>
             </button>
           ))}
@@ -284,6 +284,56 @@ function BirdRow({ bird, seen, onOpen, onToggle }) {
       <button className={`status ${seen ? "seen" : "unseen"}`} onClick={onToggle} aria-label={`Mark ${bird.name} ${seen ? "unseen" : "seen"}`}>{seen ? "✓" : "×"}<small>{seen ? "Seen" : "Not seen"}</small></button>
       <button className="row-arrow" onClick={onOpen} aria-label={`Open ${bird.name}`}>›</button>
     </article>
+  );
+}
+
+function LifeList({ navigate, sightings, seenBirds, requestToggle }) {
+  const seenIds = Object.keys(sightings).filter((id) => sightings[id]);
+  const [restoredBirds, setRestoredBirds] = useState({});
+  useEffect(() => {
+    const missingKeys = seenIds
+      .filter((id) => !seenBirds[id] && !BIRDS.some((bird) => bird.id === id))
+      .map((id) => [id, id.match(/^gbif-(\d+)$/)?.[1]])
+      .filter(([, key]) => key);
+    if (!missingKeys.length) return;
+    let active = true;
+    Promise.all(missingKeys.map(async ([id, key]) => {
+      const response = await fetch(`/api/birds/${key}`);
+      if (!response.ok) return null;
+      const data = await response.json();
+      return [id, { id, gbifKey: Number(key), name: data.name, scientific: data.scientific, rarity: "Recorded", ...data }];
+    })).then((entries) => {
+      if (active) setRestoredBirds(Object.fromEntries(entries.filter(Boolean)));
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [seenIds.join("|")]);
+  const birds = seenIds
+    .map((id) => seenBirds[id] || BIRDS.find((bird) => bird.id === id) || restoredBirds[id])
+    .filter(Boolean)
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const unresolved = seenIds.length - birds.length;
+  return (
+    <main className="inner-page life-list-page">
+      <NavBar onBack={() => navigate({ view: "home" })} onHome={() => navigate({ view: "home" })} title="My life list" />
+      <section className="inner-hero">
+        <p className="eyebrow">BIRDS YOU’VE SEEN</p>
+        <h1>Your life list</h1>
+        <p>{seenIds.length ? `${seenIds.length.toLocaleString()} of ${WORLD_SPECIES_COUNT.toLocaleString()} living bird species marked as seen.` : "Birds you mark as seen will appear here."}</p>
+      </section>
+      <section className="bird-list">
+        {birds.map((bird) => (
+          <BirdRow
+            key={bird.id}
+            bird={bird}
+            seen
+            onOpen={() => navigate({ view: "bird", birdId: bird.id, bird, back: { view: "life-list" } })}
+            onToggle={() => requestToggle(bird)}
+          />
+        ))}
+      </section>
+      {!birds.length && <section className="card empty-life-list"><span>🪶</span><h2>Your list is ready to grow</h2><p>Explore a place or search for a living species, then press the check mark to add it.</p><button onClick={() => navigate({ view: "home" })}>Explore birds</button></section>}
+      {unresolved > 0 && <p className="data-note">{unresolved} older saved {unresolved === 1 ? "entry is" : "entries are"} missing profile details. Open and mark those birds again to restore them.</p>}
+    </main>
   );
 }
 
@@ -486,6 +536,7 @@ export default function App() {
   const [route, setRoute] = useState({ view: "home" });
   const [search, setSearch] = useState("");
   const [sightings, setSightings] = useStoredState("birdtrack-sightings", {});
+  const [seenBirds, setSeenBirds] = useStoredState("birdtrack-seen-birds", {});
   const [confirmBird, setConfirmBird] = useState(null);
   useEffect(() => {
     const syncRoute = () => setRoute(pathToRoute(window.location.pathname));
@@ -499,13 +550,19 @@ export default function App() {
     setSearch("");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
-  const toggle = () => { setSightings({ ...sightings, [confirmBird.id]: !sightings[confirmBird.id] }); setConfirmBird(null); };
+  const toggle = () => {
+    const willBeSeen = !sightings[confirmBird.id];
+    setSightings({ ...sightings, [confirmBird.id]: willBeSeen });
+    if (willBeSeen) setSeenBirds({ ...seenBirds, [confirmBird.id]: confirmBird });
+    setConfirmBird(null);
+  };
   const seenCount = Object.values(sightings).filter(Boolean).length;
   return <>
     {route.view === "home" && <Home navigate={navigate} seenCount={seenCount} search={search} setSearch={setSearch} onWorkspace={() => navigate({ view: "workspace", tab: "journal" })} />}
     {route.view === "continent" && <Continent continent={route.continent} navigate={navigate} />}
     {route.view === "area" && <Area {...route} navigate={navigate} sightings={sightings} requestToggle={setConfirmBird} />}
     {route.view === "bird" && <DirectBird route={route} sightings={sightings} navigate={navigate} requestToggle={setConfirmBird} />}
+    {route.view === "life-list" && <LifeList navigate={navigate} sightings={sightings} seenBirds={seenBirds} requestToggle={setConfirmBird} />}
     {route.view === "workspace" && <Workspace navigate={navigate} initialTab={route.tab} />}
     {route.view === "not-found" && <RouteNotFound navigate={navigate} />}
     {confirmBird && <Confirm bird={confirmBird} seen={!!sightings[confirmBird.id]} onCancel={() => setConfirmBird(null)} onConfirm={toggle} />}
