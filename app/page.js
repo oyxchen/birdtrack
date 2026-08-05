@@ -14,6 +14,23 @@ const Icon = ({ children, size = 20 }) => (
   <span className="icon" style={{ width: size, height: size }} aria-hidden="true">{children}</span>
 );
 
+function normalizeBirdLabel(value = "") {
+  return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim().toLocaleLowerCase();
+}
+
+function uniqueBirds(list) {
+  const names = new Set();
+  const scientificNames = new Set();
+  return list.filter((bird) => {
+    const name = normalizeBirdLabel(bird.name);
+    const scientific = normalizeBirdLabel(bird.scientific);
+    if ((name && names.has(name)) || (scientific && scientificNames.has(scientific))) return false;
+    if (name) names.add(name);
+    if (scientific) scientificNames.add(scientific);
+    return true;
+  });
+}
+
 function Logo({ onClick }) {
   return (
     <button className="logo" onClick={onClick} aria-label="Open journal and bird research">
@@ -56,7 +73,7 @@ function Home({ navigate, seenCount, search, setSearch, onWorkspace }) {
       const response = await fetch(`/api/birds?rare=true&offset=${offset}&limit=12`);
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
-      setExtremelyRareBirds((current) => offset === 0 ? data.birds : [...current, ...data.birds]);
+      setExtremelyRareBirds((current) => uniqueBirds(offset === 0 ? data.birds : [...current, ...data.birds]));
       setRareTotal(data.total);
       setRareNextOffset(data.nextOffset);
     } catch {
@@ -96,7 +113,7 @@ function Home({ navigate, seenCount, search, setSearch, onWorkspace }) {
     const q = search.trim().toLowerCase();
     if (!q) return [];
     const localBirds = BIRDS.filter((bird) => `${bird.name} ${bird.scientific}`.toLowerCase().includes(q));
-    const allBirds = [...localBirds, ...catalogBirds.filter((bird) => !localBirds.some((item) => item.id === bird.id))];
+    const allBirds = uniqueBirds([...localBirds, ...catalogBirds]);
     const birds = allBirds
       .map((b) => ({ type: "bird", title: b.name, subtitle: b.scientific, value: b.id }));
     const places = Object.values(LOCATIONS).flatMap((l) => l.regions)
@@ -112,7 +129,7 @@ function Home({ navigate, seenCount, search, setSearch, onWorkspace }) {
         <section className="search-results card">
           <p className="eyebrow">Search results</p>
           {results.length ? results.map((r) => (
-            <button key={`${r.type}-${r.value}`} onClick={() => r.type === "bird" ? navigate({ view: "bird", birdId: r.value }) : setSearch("")}>
+            <button key={`${r.type}-${r.value}`} onClick={() => r.type === "bird" ? navigate({ view: "bird", birdId: r.value, back: { view: "home", restoreScroll: window.scrollY } }) : setSearch("")}>
               <span>{r.type === "bird" ? "🐦" : "⌖"}</span><div><b>{r.title}</b><small>{r.subtitle}</small></div><em>→</em>
             </button>
           )) : <p className="muted">{searchingBirds ? "Searching the complete bird catalog…" : "No birds or places found."}</p>}
@@ -153,7 +170,7 @@ function Home({ navigate, seenCount, search, setSearch, onWorkspace }) {
         </div>
         <div className="rare-bird-grid">
           {extremelyRareBirds.map((bird) => (
-            <button key={bird.id} className="rare-bird-card" onClick={() => navigate({ view: "bird", birdId: bird.id, bird })}>
+            <button key={bird.id} className="rare-bird-card" onClick={() => navigate({ view: "bird", birdId: bird.id, bird, back: { view: "home", restoreScroll: window.scrollY } })}>
               <span className="rare-bird-photo">
                 <img src={`/api/birds/${bird.gbifKey}/image`} alt="" loading="lazy" onError={(event) => { event.currentTarget.style.display = "none"; }} />
               </span>
@@ -227,7 +244,7 @@ function Area({ continent, country, navigate, sightings, requestToggle }) {
       const response = await fetch(`/api/birds?country=${encodeURIComponent(country)}&offset=${offset}&limit=80`);
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
-      setLiveBirds((current) => offset === 0 ? data.birds : [...current, ...data.birds.filter((b) => !current.some((c) => c.id === b.id))]);
+      setLiveBirds((current) => uniqueBirds(offset === 0 ? data.birds : [...current, ...data.birds]));
       setLiveTotal(data.total); setNextOffset(data.nextOffset);
     } catch (error) { setDataError(error.message || "Live bird data could not be loaded."); }
     finally { setLoadingBirds(false); }
@@ -236,6 +253,11 @@ function Area({ continent, country, navigate, sightings, requestToggle }) {
   useEffect(() => { setLiveBirds([]); setLiveTotal(null); setNextOffset(0); loadBirds(0); }, [country]);
   useEffect(() => {
     if (!loadingBirds && !dataError && nextOffset !== null && liveBirds.length > 0) loadBirds(nextOffset);
+  }, [loadingBirds, dataError, nextOffset, liveBirds.length]);
+  useEffect(() => {
+    if (!loadingBirds && !dataError && nextOffset === null && liveBirds.length > 0) {
+      setLiveTotal(liveBirds.length);
+    }
   }, [loadingBirds, dataError, nextOffset, liveBirds.length]);
 
   return (
@@ -258,7 +280,7 @@ function Area({ continent, country, navigate, sightings, requestToggle }) {
         <label>Sort by <select value={sort} onChange={(e) => setSort(e.target.value)}><option value="common">Common ↑</option><option value="rare">Rare ↑</option><option value="az">A–Z</option><option value="za">Z–A</option></select></label>
       </div>
       <section className="bird-list">
-        {birds.map((bird) => <BirdRow key={bird.id} bird={bird} seen={!!sightings[bird.id]} onOpen={() => navigate({ view: "bird", birdId: bird.id, bird, back: { view: "area", continent, country } })} onToggle={() => requestToggle(bird)} />)}
+        {birds.map((bird) => <BirdRow key={bird.id} bird={bird} seen={!!sightings[bird.id]} onOpen={() => navigate({ view: "bird", birdId: bird.id, bird, back: { view: "area", continent, country, restoreScroll: window.scrollY } })} onToggle={() => requestToggle(bird)} />)}
       </section>
       {loadingBirds && liveBirds.length === 0 && <div className="loading-birds"><span /><p>Finding every qualifying bird recorded in {country}…</p></div>}
       {dataError && <div className="data-warning">{dataError} Showing the offline starter list. <button onClick={() => loadBirds(0)}>Try again</button></div>}
@@ -307,11 +329,12 @@ function LifeList({ navigate, sightings, seenBirds, requestToggle }) {
     }).catch(() => {});
     return () => { active = false; };
   }, [seenIds.join("|")]);
-  const birds = seenIds
+  const resolvedBirds = seenIds
     .map((id) => seenBirds[id] || BIRDS.find((bird) => bird.id === id) || restoredBirds[id])
-    .filter(Boolean)
+    .filter(Boolean);
+  const birds = uniqueBirds(resolvedBirds)
     .sort((a, b) => a.name.localeCompare(b.name));
-  const unresolved = seenIds.length - birds.length;
+  const unresolved = seenIds.length - resolvedBirds.length;
   return (
     <main className="inner-page life-list-page">
       <NavBar onBack={() => navigate({ view: "home" })} onHome={() => navigate({ view: "home" })} title="My life list" />
@@ -326,7 +349,7 @@ function LifeList({ navigate, sightings, seenBirds, requestToggle }) {
             key={bird.id}
             bird={bird}
             seen
-            onOpen={() => navigate({ view: "bird", birdId: bird.id, bird, back: { view: "life-list" } })}
+            onOpen={() => navigate({ view: "bird", birdId: bird.id, bird, back: { view: "life-list", restoreScroll: window.scrollY } })}
             onToggle={() => requestToggle(bird)}
           />
         ))}
@@ -548,7 +571,10 @@ export default function App() {
     window.history.pushState({}, "", routeToPath(next));
     setRoute(next);
     setSearch("");
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    const target = Number.isFinite(next.restoreScroll) ? next.restoreScroll : 0;
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => window.scrollTo({ top: target, behavior: "auto" }));
+    });
   };
   const toggle = () => {
     const willBeSeen = !sightings[confirmBird.id];
@@ -557,10 +583,21 @@ export default function App() {
     setConfirmBird(null);
   };
   const seenCount = Object.values(sightings).filter(Boolean).length;
+  const preservedArea = route.view === "area"
+    ? route
+    : route.view === "bird" && route.back?.view === "area"
+      ? route.back
+      : null;
   return <>
-    {route.view === "home" && <Home navigate={navigate} seenCount={seenCount} search={search} setSearch={setSearch} onWorkspace={() => navigate({ view: "workspace", tab: "journal" })} />}
+    <div hidden={route.view !== "home"}>
+      <Home navigate={navigate} seenCount={seenCount} search={search} setSearch={setSearch} onWorkspace={() => navigate({ view: "workspace", tab: "journal" })} />
+    </div>
     {route.view === "continent" && <Continent continent={route.continent} navigate={navigate} />}
-    {route.view === "area" && <Area {...route} navigate={navigate} sightings={sightings} requestToggle={setConfirmBird} />}
+    {preservedArea && (
+      <div hidden={route.view !== "area"}>
+        <Area {...preservedArea} navigate={navigate} sightings={sightings} requestToggle={setConfirmBird} />
+      </div>
+    )}
     {route.view === "bird" && <DirectBird route={route} sightings={sightings} navigate={navigate} requestToggle={setConfirmBird} />}
     {route.view === "life-list" && <LifeList navigate={navigate} sightings={sightings} seenBirds={seenBirds} requestToggle={setConfirmBird} />}
     {route.view === "workspace" && <Workspace navigate={navigate} initialTab={route.tab} />}
