@@ -35,6 +35,10 @@ header { height: 112px; padding: 18px clamp(24px, 6vw, 90px); display: grid; gri
 .world-count div { display: flex; flex-direction: column; }
 .world-count strong { font-family: "Nunito"; font-size: 17px; }
 .world-count small { color: var(--muted); }
+.species-list-controls { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
+.species-search { width: min(330px, 72vw); height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 13px; border: 1px solid #c7dfe3; border-radius: 13px; background: white; }
+.species-search input { width: 100%; border: 0; outline: 0; background: transparent; color: var(--ink); font: inherit; }
+.species-search:focus-within { outline: 3px solid rgba(240, 145, 133, .28); border-color: var(--coral); }
 .empty-life-list { max-width: 620px; margin: 32px auto; padding: 42px; text-align: center; }
 .empty-life-list > span { font-size: 48px; }
 .empty-life-list button { border: 0; border-radius: 999px; background: var(--navy); color: white; padding: 12px 22px; font-weight: 800; cursor: pointer; }

@@ -231,6 +231,9 @@ function Area({ continent, country, navigate, sightings, requestToggle }) {
   const [nextOffset, setNextOffset] = useState(0);
   const [loadingBirds, setLoadingBirds] = useState(true);
   const [dataError, setDataError] = useState("");
+  const [speciesSearch, setSpeciesSearch] = useState("");
+  const [searchBirds, setSearchBirds] = useState([]);
+  const [searchingSpecies, setSearchingSpecies] = useState(false);
   const rarityOrder = { Common: 0, Uncommon: 1, Rare: 2 };
   const starterBirds = location.birds.map((id) => BIRDS.find((b) => b.id === id)).filter(Boolean);
   const sourceBirds = liveBirds.length ? liveBirds : starterBirds;
@@ -259,6 +262,35 @@ function Area({ continent, country, navigate, sightings, requestToggle }) {
       setLiveTotal(liveBirds.length);
     }
   }, [loadingBirds, dataError, nextOffset, liveBirds.length]);
+  useEffect(() => {
+    const query = speciesSearch.trim();
+    if (query.length < 2) {
+      setSearchBirds([]);
+      setSearchingSpecies(false);
+      return;
+    }
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setSearchingSpecies(true);
+      try {
+        const response = await fetch(`/api/birds?country=${encodeURIComponent(country)}&q=${encodeURIComponent(query)}`, {
+          signal: controller.signal
+        });
+        const data = await response.json();
+        if (response.ok) setSearchBirds(uniqueBirds(data.birds || []));
+      } catch (error) {
+        if (error.name !== "AbortError") setSearchBirds([]);
+      } finally {
+        if (!controller.signal.aborted) setSearchingSpecies(false);
+      }
+    }, 250);
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [speciesSearch, country]);
+
+  const shownBirds = speciesSearch.trim().length >= 2 ? searchBirds : birds;
 
   return (
     <main className="inner-page area-page">
@@ -277,11 +309,16 @@ function Area({ continent, country, navigate, sightings, requestToggle }) {
       </section>
       <div className="list-tools">
         <div><p className="eyebrow">SPECIES LIST</p><h2>Birds seen in this area</h2></div>
-        <label>Sort by <select value={sort} onChange={(e) => setSort(e.target.value)}><option value="common">Common ↑</option><option value="rare">Rare ↑</option><option value="az">A–Z</option><option value="za">Z–A</option></select></label>
+        <div className="species-list-controls">
+          <label className="species-search"><span>⌕</span><input value={speciesSearch} onChange={(event) => setSpeciesSearch(event.target.value)} placeholder={`Search every bird in ${country}…`} aria-label={`Search birds recorded in ${country}`} /></label>
+          <label>Sort by <select value={sort} onChange={(e) => setSort(e.target.value)}><option value="common">Common ↑</option><option value="rare">Rare ↑</option><option value="az">A–Z</option><option value="za">Z–A</option></select></label>
+        </div>
       </div>
       <section className="bird-list">
-        {birds.map((bird) => <BirdRow key={bird.id} bird={bird} seen={!!sightings[bird.id]} onOpen={() => navigate({ view: "bird", birdId: bird.id, bird, back: { view: "area", continent, country, restoreScroll: window.scrollY } })} onToggle={() => requestToggle(bird)} />)}
+        {shownBirds.map((bird) => <BirdRow key={bird.id} bird={bird} seen={!!sightings[bird.id]} onOpen={() => navigate({ view: "bird", birdId: bird.id, bird, back: { view: "area", continent, country, restoreScroll: window.scrollY } })} onToggle={() => requestToggle(bird)} />)}
       </section>
+      {searchingSpecies && <div className="loading-birds"><span /><p>Checking every species recorded in {country}…</p></div>}
+      {!searchingSpecies && speciesSearch.trim().length >= 2 && searchBirds.length === 0 && <div className="data-warning">No qualifying bird found for “{speciesSearch.trim()}” in {country}.</div>}
       {loadingBirds && liveBirds.length === 0 && <div className="loading-birds"><span /><p>Finding every qualifying bird recorded in {country}…</p></div>}
       {dataError && <div className="data-warning">{dataError} Showing the offline starter list. <button onClick={() => loadBirds(0)}>Try again</button></div>}
       {loadingBirds && liveBirds.length > 0 && <div className="loading-birds"><span /><p>Loading all species… {liveBirds.length} of {liveTotal ?? "many"} shown</p></div>}

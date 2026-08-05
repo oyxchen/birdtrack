@@ -179,6 +179,37 @@ async function searchSpecies(query) {
   return birds.map((bird) => ({ ...bird, rarity: "Recorded", sightings: undefined }));
 }
 
+async function searchSpeciesInCountry(query, countryCode) {
+  const matches = await searchSpecies(query);
+  const birds = await Promise.all(matches.map(async (bird) => {
+    const params = new URLSearchParams({
+      country: countryCode,
+      taxon_key: String(bird.gbifKey),
+      year: `${firstYear},${currentYear}`,
+      occurrence_status: "present",
+      has_geospatial_issue: "false",
+      limit: "0"
+    });
+    const response = await fetch(`https://api.gbif.org/v1/occurrence/search?${params}`, {
+      next: { revalidate: 60 * 60 * 12 }
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    const count = Number(data.count) || 0;
+    if (count < 10) return null;
+    return {
+      ...bird,
+      sightings: count,
+      rarity: rarityFor(count),
+      description: [
+        `${bird.name} (${bird.scientific}) has been documented ${count.toLocaleString()} times in this area during BirdTrack’s rolling ten-year data window.`,
+        "Open the GBIF species source for taxonomy and occurrence details. A richer sourced profile and freely licensed photograph can be added when this species page is opened."
+      ]
+    };
+  }));
+  return birds.filter(Boolean);
+}
+
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
   if (searchParams.get("rare") === "true") {
@@ -211,17 +242,24 @@ export async function GET(request) {
   }
 
   const query = searchParams.get("q")?.trim() || "";
+  const country = searchParams.get("country") || "";
+  const countryCode = COUNTRY_CODES[country];
   if (query) {
     if (query.length < 2) return NextResponse.json({ birds: [] });
     try {
+      if (country) {
+        if (!countryCode) return NextResponse.json({ error: "This country is not configured." }, { status: 400 });
+        return NextResponse.json({
+          birds: await searchSpeciesInCountry(query, countryCode),
+          source: "AviList living species verified against GBIF country occurrences"
+        });
+      }
       return NextResponse.json({ birds: await searchSpecies(query), source: "AviList v2025b living species matched to GBIF taxonomy" });
     } catch {
       return NextResponse.json({ error: "Bird search is temporarily unavailable." }, { status: 502 });
     }
   }
 
-  const country = searchParams.get("country") || "";
-  const countryCode = COUNTRY_CODES[country];
   const offset = Math.max(0, Number(searchParams.get("offset")) || 0);
   const limit = Math.min(100, Math.max(20, Number(searchParams.get("limit")) || 60));
   if (!countryCode) return NextResponse.json({ error: "This country is not configured." }, { status: 400 });
